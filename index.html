@@ -1,23 +1,21 @@
 # -*- coding: utf-8 -*-
-"""Script 1: cria a pasta jarvis com todos os arquivos do projeto.
-Rode:  python setup.py
-"""
-import os
+# ══════════════════════════════════════════════════════════════
+#  🤖 JARVIS v4 — TUDO EM UM ARQUIVO SÓ
+#  Assistente de voz estilo Homem de Ferro • SEM API KEY
+#
+#  COMO USAR:
+#    1. pip install pyttsx3 SpeechRecognition wikipedia feedparser \
+#                 pywhatkit pyjokes requests psutil
+#    2. python jarvis_completo.py        (modo voz)
+#    3. python jarvis_completo.py --gui  (interface gráfica)
+#
+#  Diga "Jarvis" para acordar. Diga "desligar" para encerrar.
+# ══════════════════════════════════════════════════════════════
 
-PASTA = "jarvis"
-os.makedirs(PASTA, exist_ok=True)
+import re
+import requests
 
-ARQUIVOS = {
-    'requirements.txt': r"""pyttsx3==2.90
-SpeechRecognition==3.10.4
-wikipedia==1.4.0
-feedparser==6.0.11
-pywhatkit==5.4
-pyjokes==0.8.3
-requests==2.32.3
-psutil==6.1.0
-""",
-    'config.py': r"""# Configurações do JARVIS v4 — tudo funciona SEM chave de API
+# Configurações do JARVIS v4 — tudo funciona SEM chave de API
 
 # --- voz ---
 VOZ_ID = None
@@ -39,17 +37,8 @@ FONTES_NOTICIAS = {
     "virais_br":  "https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419",
     "brasil":     "https://news.google.com/rss/search?q=Brasil&hl=pt-BR&gl=BR&ceid=BR:pt-419",
 }
-""",
-    'brain.py': r"""# -*- coding: utf-8 -*-
-# Cérebro do JARVIS v4 - IA sem chave de API
-#
-# Estratégia (tudo gratuito, sem cadastro):
-#   1. DuckDuckGo AI Chat (modelo gratuito, sem key)
-#   2. DuckDuckGo Instant Answers (fatsobjectos diretos)
-#   3. Wikipédia (resumo)
-#   4. Resposta local de fallback
-import re
-import requests
+
+# ══════════ CÉREBRO (IA sem API key) ══════════
 
 PERSONALIDADE = """Você é o JARVIS, assistente pessoal estilo Homem de Ferro.
 Fale em português do Brasil, seja elegante, levemente irônico e prestativo,
@@ -62,17 +51,15 @@ MODELO_DDG = "gpt-4o-mini"
 
 
 class Cerebro:
-    def __init__(self, config):
-        self.cfg = config
+    def __init__(self, cfg):
+        self.cfg = cfg
         self.historico = []
 
-    # ---------- memória ----------
     def lembrar(self, papel, texto):
         self.historico.append({"role": papel, "content": texto})
         if len(self.historico) > self.cfg.MAX_MEMORIA * 2:
             self.historico = self.historico[-self.cfg.MAX_MEMORIA * 2:]
 
-    # ---------- 1) DuckDuckGo AI Chat (sem key) ----------
     def _ddg_vqd(self):
         r = requests.get(DDG_CHAT_URL, timeout=15,
                          headers={"User-Agent": "Mozilla/5.0"})
@@ -108,7 +95,6 @@ class Cerebro:
             raise ValueError("resposta vazia")
         return resposta
 
-    # ---------- 2) DuckDuckGo Instant Answers ----------
     def _ddg_instant(self, pergunta):
         r = requests.get(
             "https://api.duckduckgo.com/",
@@ -124,16 +110,13 @@ class Cerebro:
             raise ValueError("sem resposta instantânea")
         return texto
 
-    # ---------- 3) Wikipédia ----------
     def _wiki(self, pergunta):
         import wikipedia
         wikipedia.set_lang("pt")
         tema = pergunta.strip().rstrip("?")
         return wikipedia.summary(tema, sentences=2)
 
-    # ---------- cérebro completo ----------
     def pensar(self, pergunta):
-        """Tenta na ordem: IA -> instant -> wiki -> fallback. Nunca dá erro."""
         tentativas = [
             ("IA do DuckDuckGo", self._ddg_pensar),
             ("resposta direta",  self._ddg_instant),
@@ -151,9 +134,14 @@ class Cerebro:
                 continue
         return ("Me desculpe, senhor, não consegui consultar meus bancos de "
                 "dados agora. Poderia repetir daqui a pouco?")
-""",
-    'jarvis.py': r"""# -*- coding: utf-8 -*-
-# JARVIS v3 - estilo "verdadeiro": wake word, cérebro LLG, memória, modo conversa
+
+
+class _Cfg:  # embrulha as configs pro cérebro
+    MAX_MEMORIA = MAX_MEMORIA
+
+
+# ══════════ NÚCLEO DO JARVIS ══════════
+
 import datetime
 import random
 import subprocess
@@ -162,14 +150,10 @@ import pyjokes
 import psutil
 import feedparser
 import pywhatkit
-import requests
 import wikipedia
 
 import speech_recognition as sr
 import pyttsx3
-
-import config
-from brain import Cerebro
 
 wikipedia.set_lang("pt")
 
@@ -184,32 +168,28 @@ SAUDACOES_ACORDAR = [
 class Jarvis:
     def __init__(self, log=lambda m: print(m)):
         self.log = log
-        self.cerebro = Cerebro(config)
+        self.cerebro = Cerebro(_Cfg())
 
-        # voz (TTS)
         self.engine = pyttsx3.init()
-        self.engine.setProperty("rate", config.VELOCIDADE_FALA)
-        if config.VOZ_ID:
-            self.engine.setProperty("voice", config.VOZ_ID)
+        self.engine.setProperty("rate", VELOCIDADE_FALA)
+        if VOZ_ID:
+            self.engine.setProperty("voice", VOZ_ID)
 
-        # microfone (STT)
         self.rec = sr.Recognizer()
         self.mic = sr.Microphone()
 
-    # ---------- fala ----------
     def falar(self, texto):
         self.log(f"JARVIS: {texto}")
         self.engine.say(texto)
         self.engine.runAndWait()
 
-    # ---------- escuta ----------
     def ouvir(self, frase_status="Ouvindo..."):
         with self.mic as fonte:
             self.log(frase_status)
             self.rec.adjust_for_ambient_noise(fonte, duration=0.5)
             audio = self.rec.listen(fonte, timeout=10, phrase_time_limit=10)
         try:
-            texto = self.rec.recognize_google(audio, language=config.IDIOMA_STT)
+            texto = self.rec.recognize_google(audio, language=IDIOMA_STT)
             self.log(f"Você: {texto}")
             return texto.lower()
         except sr.UnknownValueError:
@@ -218,20 +198,17 @@ class Jarvis:
             self.falar("Sem conexão com o serviço de reconhecimento.")
             return ""
 
-    # ---------- WAKE WORD: fica ouvindo até ouvir "jarvis" ----------
     def aguardar_wake_word(self):
-        self.log(f'Aguardando wake word "{config.WAKE_WORD}"...')
+        self.log(f'Aguardando wake word "{WAKE_WORD}"...')
         while True:
             frase = self.ouvir("Standby...")
-            if config.WAKE_WORD in frase:
+            if WAKE_WORD in frase:
                 self.falar(random.choice(SAUDACOES_ACORDAR))
                 return True
 
-    # ---------- núcleo conversacional ----------
     def conversar(self):
-        """Modo conversa: fica ativo até timeout ou desligar."""
         silencio = 0
-        while silencio < config.TIMEOUT_CONVERSA:
+        while silencio < TIMEOUT_CONVERSA:
             cmd = self.ouvir()
             if not cmd:
                 silencio += 1
@@ -242,12 +219,10 @@ class Jarvis:
         self.falar("Vou voltar ao modo standby, senhor. É só me chamar.")
         return True
 
-    # ---------- comandos ----------
     def executar(self, cmd):
         if not cmd:
             return True
 
-        # ---- habilidades locais (rápidas, não precisam de IA) ----
         if "horas" in cmd:
             self.falar(f"São {datetime.datetime.now().strftime('%H:%M')}.")
         elif "dia é hoje" in cmd or "data" in cmd:
@@ -258,9 +233,9 @@ class Jarvis:
             if "sobre" in cmd:
                 self.pesquisar_noticias(cmd.split("sobre")[-1].strip())
             elif "brasil" in cmd:
-                self._ler_feed(config.FONTES_NOTICIAS["brasil"], "Notícias do Brasil, senhor:")
+                self._ler_feed(FONTES_NOTICIAS["brasil"], "Notícias do Brasil, senhor:")
             else:
-                self._ler_feed(config.FONTES_NOTICIAS["mundo"], "Notícias do mundo, senhor:")
+                self._ler_feed(FONTES_NOTICIAS["mundo"], "Notícias do mundo, senhor:")
         elif "clima" in cmd or "temperatura" in cmd:
             self.clima()
         elif "bateria" in cmd:
@@ -283,31 +258,21 @@ class Jarvis:
             self.falar("Até logo, senhor. Desligando sistemas.")
             return False
         else:
-            # ---- cérebro LLM: conversa livre sobre qualquer assunto ----
             resposta = self.cerebro.pensar(cmd)
-            if resposta:
-                self.falar(resposta)
-            else:
-                try:
-                    resumo = wikipedia.summary(cmd, sentences=2)
-                    self.falar(resumo)
-                except Exception:
-                    self.falar("Me desculpe, senhor, não consegui consultar meus "
-                               "bancos de dados agora.")
+            self.falar(resposta)
         return True
 
-    # ---------- habilidades ----------
     def _ler_feed(self, url, intro):
         feed = feedparser.parse(url)
         if not feed.entries:
             self.falar("Não consegui acessar as notícias agora, senhor.")
             return
         self.falar(intro)
-        for item in feed.entries[:config.MAX_NOTICIAS]:
+        for item in feed.entries[:MAX_NOTICIAS]:
             self.falar(item.title)
 
     def noticias_virais(self):
-        self._ler_feed(config.FONTES_NOTICIAS["virais_br"],
+        self._ler_feed(FONTES_NOTICIAS["virais_br"],
                        "O que está bombando no Brasil agora, senhor:")
 
     def pesquisar_noticias(self, tema):
@@ -319,8 +284,8 @@ class Jarvis:
     def clima(self):
         try:
             r = requests.get(
-                f"https://wttr.in/{config.CIDADE}?format=%C+%t&lang=pt", timeout=10)
-            self.falar(f"Na cidade de {config.CIDADE}: {r.text.strip()}.")
+                f"https://wttr.in/{CIDADE}?format=%C+%t&lang=pt", timeout=10)
+            self.falar(f"Na cidade de {CIDADE}: {r.text.strip()}.")
         except Exception:
             self.falar("Não consegui consultar o clima agora.")
 
@@ -338,26 +303,19 @@ class Jarvis:
         except FileNotFoundError:
             self.falar(f"Não encontrei o programa {nome}.")
 
-    # ---------- loop principal: standby -> acorda -> conversa ----------
     def rodar(self):
-        self.falar(f"JARVIS online. Bom te ver, {config.NOME_USUARIO}. "
-                   f'Dou o comando "{config.WAKE_WORD}" para me acordar.')
+        self.falar(f"JARVIS online. Bom te ver, {NOME_USUARIO}. "
+                   f'Dou o comando "{WAKE_WORD}" para me acordar.')
         while True:
             self.aguardar_wake_word()
             if not self.conversar():
                 break
 
 
-if __name__ == "__main__":
-    Jarvis().rodar()
-""",
-    'gui.py': r"""# -*- coding: utf-8 -*-
-# Interface gráfica do JARVIS v3 (tkinter)
+# ══════════ MODO INTERFACE GRÁFICA ══════════
+
 import tkinter as tk
 import threading
-
-import config
-from jarvis import Jarvis
 
 COR_FUNDO = "#050b1a"
 COR_AZUL = "#19b8ff"
@@ -377,7 +335,6 @@ class InterfaceJarvis:
         self._animar_anel()
         self._log("JARVIS inicializado. Pronto para conversar, senhor.")
 
-    # ---------- widgets ----------
     def _montar_widgets(self):
         self.canvas = tk.Canvas(self.root, width=220, height=220,
                                 bg=COR_FUNDO, highlightthickness=0)
@@ -414,20 +371,17 @@ class InterfaceJarvis:
                   bg="#0a3a5c", fg=COR_TEXTO, font=("Consolas", 10, "bold"),
                   relief="flat").pack(side="left")
 
-    # ---------- efeito do anel ----------
     def _animar_anel(self, angulo=0):
         largura = 3 + int(2 * abs((angulo % 60) - 30) / 10)
         self.canvas.itemconfig(self.anel, width=largura)
         self.root.after(80, lambda: self._animar_anel(angulo + 6))
 
-    # ---------- log ----------
     def _log(self, msg):
         self.log_box.config(state="normal")
         self.log_box.insert("end", msg + "\n")
         self.log_box.see("end")
         self.log_box.config(state="disabled")
 
-    # ---------- ações ----------
     def _enviar_texto(self, evento=None):
         cmd = self.entrada.get().strip()
         if not cmd:
@@ -453,16 +407,11 @@ class InterfaceJarvis:
             self.root.after(1500, self.root.destroy)
 
 
+# ══════════ PONTO DE ENTRADA ══════════
+
 if __name__ == "__main__":
-    InterfaceJarvis().root.mainloop()
-""",
-}
-
-for nome, conteudo in ARQUIVOS.items():
-    caminho = os.path.join(PASTA, nome)
-    with open(caminho, "w", encoding="utf-8") as f:
-        f.write(conteudo)
-    print(f"✓ criado: {caminho}")
-
-print("\n🤖 Pronto! Agora rode: pip install -r jarvis/requirements.txt")
-          
+    import sys
+    if "--gui" in sys.argv:
+        InterfaceJarvis().root.mainloop()
+    else:
+        Jarvis().rodar()
