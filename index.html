@@ -1,417 +1,151 @@
-# -*- coding: utf-8 -*-
-# ══════════════════════════════════════════════════════════════
-#  🤖 JARVIS v4 — TUDO EM UM ARQUIVO SÓ
-#  Assistente de voz estilo Homem de Ferro • SEM API KEY
-#
-#  COMO USAR:
-#    1. pip install pyttsx3 SpeechRecognition wikipedia feedparser \
-#                 pywhatkit pyjokes requests psutil
-#    2. python jarvis_completo.py        (modo voz)
-#    3. python jarvis_completo.py --gui  (interface gráfica)
-#
-#  Diga "Jarvis" para acordar. Diga "desligar" para encerrar.
-# ══════════════════════════════════════════════════════════════
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS — Assistente Virtual</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#050b1a;color:#c8ecff;font-family:'Courier New',monospace;
+       min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px 14px}
+  h1{color:#19b8ff;font-size:19px;letter-spacing:4px}
+  .sub{color:#5f7ea0;font-size:11px;margin:4px 0 18px}
+  .anel{position:relative;width:160px;height:160px;margin-bottom:6px}
+  .ext{position:absolute;inset:0;border-radius:50%;border:3px solid #19b8ff;animation:pulso 2s infinite}
+  .int{position:absolute;inset:11px;border-radius:50%;border:1px dashed rgba(25,184,255,.4);animation:girar 12s linear infinite}
+  .nuc{position:absolute;inset:49px;border-radius:50%;background:#19b8ff;display:flex;align-items:center;
+       justify-content:center;color:#050b1a;font-weight:bold;font-size:11px;box-shadow:0 0 30px #19b8ff88}
+  @keyframes pulso{0%,100%{box-shadow:0 0 0 0 rgba(25,184,255,.5)}50%{box-shadow:0 0 0 15px rgba(25,184,255,0)}}
+  @keyframes girar{to{transform:rotate(360deg)}}
+  .status{color:#19b8ff;font-size:11px;letter-spacing:2px;margin-bottom:14px}
+  #chat{width:100%;max-width:440px;background:#0a1630;border:1px solid #123;border-radius:12px;
+        padding:13px;height:270px;overflow-y:auto;font-size:13px}
+  #chat div{margin-bottom:8px;line-height:1.55;animation:aparecer .35s}
+  .j{color:#19b8ff}.v{color:#c8ecff;text-align:right}
+  @keyframes aparecer{from{opacity:0;transform:translateY(6px)}to{opacity:1}}
+  .controles{width:100%;max-width:440px;margin-top:13px}
+  input{width:100%;background:#0a1630;border:1px solid #123;color:#c8ecff;padding:11px 13px;
+        border-radius:8px;font-family:inherit;font-size:13px}
+  .botoes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:9px}
+  button{background:#0a3a5c;color:#c8ecff;border:none;padding:10px;border-radius:8px;
+         font-family:inherit;font-size:11px;cursor:pointer}
+  button:active{background:#19b8ff;color:#050b1a}
+  .footer{margin-top:18px;color:#3a5578;font-size:10px;text-align:center}
+</style>
+</head>
+<body>
 
-import re
-import requests
+<h1>J.A.R.V.I.S.</h1>
+<div class="sub">Just A Rather Very Intelligent System</div>
 
-# Configurações do JARVIS v4 — tudo funciona SEM chave de API
+<div class="anel"><div class="ext"></div><div class="int"></div><div class="nuc">JARVIS</div></div>
+<div class="status" id="status">TOQUE EM 🎙️ E DIGA "JARVIS"</div>
 
-# --- voz ---
-VOZ_ID = None
-IDIOMA_STT = "pt-BR"
-VELOCIDADE_FALA = 180
+<div id="chat"></div>
 
-# --- comportamento ---
-WAKE_WORD = "jarvis"       # palavra que acorda o assistente
-TIMEOUT_CONVERSA = 3       # silêncios seguidos antes de voltar pro standby
-MAX_MEMORIA = 10           # mensagens lembradas da conversa
-NOME_USUARIO = "Chefe"
-CIDADE = "Sao Paulo"
-MAX_NOTICIAS = 5
+<div class="controles">
+  <input id="cmd" placeholder="Ou digite aqui... (ex: notícias)">
+  <div class="botoes">
+    <button onclick="falarCmd('que horas são')">🕐 Horas</button>
+    <button onclick="falarCmd('notícias virais do brasil')">🔥 Virais no BR</button>
+    <button onclick="ativarVoz()">🎙️ Falar</button>
+    <button onclick="falarCmd('me conta uma piada')">😂 Piada</button>
+    <button onclick="falarCmd('qual é a data de hoje')">📅 Data</button>
+    <button onclick="falarCmd('quem é você')">🤖 Sobre</button>
+  </div>
+</div>
 
-# --- fontes RSS (públicas, sem chave) ---
-FONTES_NOTICIAS = {
-    "mundo":      "https://feeds.bbci.co.uk/portuguese/rss.xml",
-    "tecnologia": "https://feeds.bbci.co.uk/portuguese/topics/c9y2j35dn06t/rss.xml",
-    "virais_br":  "https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419",
-    "brasil":     "https://news.google.com/rss/search?q=Brasil&hl=pt-BR&gl=BR&ceid=BR:pt-419",
+<div class="footer">🤖 JARVIS v4 — assistente de voz • sem API key</div>
+
+<script>
+const chat = document.getElementById('chat');
+const statusEl = document.getElementById('status');
+const temVoz = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+
+function add(cls, txt){
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = txt;
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+}
+function falarJ(txt){
+  add('j', 'JARVIS: ' + txt);
+  const u = new SpeechSynthesisUtterance(txt);
+  u.lang = 'pt-BR'; u.rate = 1.05;
+  speechSynthesis.speak(u);
 }
 
-# ══════════ CÉREBRO (IA sem API key) ══════════
+const piadas = [
+  'Por que o JavaScript foi ao terapeuta? Muitos callbacks não resolvidos.',
+  'O que o zero disse para o oito? Belo cinto!',
+  'Por que o Wi-Fi terminou com o fio? Precisava de espaço.'
+];
 
-PERSONALIDADE = """Você é o JARVIS, assistente pessoal estilo Homem de Ferro.
-Fale em português do Brasil, seja elegante, levemente irônico e prestativo,
-como um mordomo britânico leal. Responda de forma CURTA (1 a 2 frases),
-ideal para ser falado em voz alta. Chame o usuário de "senhor" ou "Chefe"."""
+async function noticiasVirias(){
+  falarJ('Consultando os feeds de notícias do Brasil...');
+  try{
+    const rss = 'https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419';
+    const r = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(rss));
+    const xml = new DOMParser().parseFromString(await r.text(), 'text/xml');
+    const itens = [...xml.querySelectorAll('item')].slice(0, 5);
+    if(!itens.length) throw 0;
+    falarJ('O que está bombando no Brasil agora, senhor:');
+    itens.forEach((it, i) => setTimeout(() =>
+      add('j', '🔥 ' + it.querySelector('title').textContent), 500*(i+1)));
+  }catch(e){
+    falarJ('Sem acesso aos feeds agora, senhor. Mas garanto que a tecnologia está em alta.');
+  }
+}
 
-DDG_CHAT_URL = "https://duckduckgo.com/aichat"
-DDG_CHAT_API = "https://duckduckgo.com/aichat/v1/chat"
-MODELO_DDG = "gpt-4o-mini"
+function responder(txt){
+  const t = txt.toLowerCase();
+  add('v', 'Você: ' + txt);
+  if(/jarvis/.test(t) && t.length < 15){
+    falarJ('Sim, senhor? Estou ouvindo.');
+  } else if(/hora/.test(t)){
+    falarJ('São ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) + ', senhor.');
+  } else if(/data|dia é hoje/.test(t)){
+    falarJ('Hoje é ' + new Date().toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'}) + '.');
+  } else if(/viral|notícia|noticia|bombando/.test(t)){
+    noticiasVirias();
+  } else if(/piada/.test(t)){
+    falarJ(piadas[Math.floor(Math.random()*piadas.length)]);
+  } else if(/clima|temperatura/.test(t)){
+    falarJ('Não tenho sensores meteorológicos nesta versão web, senhor. Mas é uma ótima noite para programar.');
+  } else if(/quem é você|seu nome|sobre/.test(t)){
+    falarJ('Sou o JARVIS — Just A Rather Very Intelligent System. Assistente pessoal às suas ordens, Chefe.');
+  } else if(/desligar|tchau|sair/.test(t)){
+    falarJ('Até logo, senhor. Desligando sistemas.');
+  } else {
+    falarJ('Interessante, senhor. Pode pedir notícias, horas, data, piada ou perguntar quem sou eu.');
+  }
+}
 
+let rec = null;
+function ativarVoz(){
+  if(!temVoz){ falarJ('Seu navegador não suporta reconhecimento de voz. Use o teclado, senhor.'); return; }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  rec = new SR();
+  rec.lang = 'pt-BR'; rec.interimResults = false;
+  statusEl.textContent = '🎙️ OUVINDO...';
+  rec.onresult = e => {
+    const txt = e.results[0][0].transcript;
+    statusEl.textContent = 'SISTEMAS ONLINE';
+    responder(txt);
+  };
+  rec.onerror = () => { statusEl.textContent = 'ERRO NO MICROFONE — use o teclado'; };
+  rec.onend = () => { if(statusEl.textContent.includes('OUVINDO')) statusEl.textContent='SISTEMAS ONLINE'; };
+  rec.start();
+}
 
-class Cerebro:
-    def __init__(self, cfg):
-        self.cfg = cfg
-        self.historico = []
+function falarCmd(c){ responder(c); }
+document.getElementById('cmd').addEventListener('keydown', e => {
+  if(e.key === 'Enter' && e.target.value.trim()){ responder(e.target.value); e.target.value=''; }
+});
 
-    def lembrar(self, papel, texto):
-        self.historico.append({"role": papel, "content": texto})
-        if len(self.historico) > self.cfg.MAX_MEMORIA * 2:
-            self.historico = self.historico[-self.cfg.MAX_MEMORIA * 2:]
+add('j','JARVIS: Sistemas online, senhor. Toque em 🎙️ e fale comigo, ou use os botões abaixo.');
+</script>
 
-    def _ddg_vqd(self):
-        r = requests.get(DDG_CHAT_URL, timeout=15,
-                         headers={"User-Agent": "Mozilla/5.0"})
-        r.raise_for_status()
-        m = re.search(r'vqd="?([\d-]+)"?', r.text) or \
-            re.search(r"vqd4?=?'?([\d-]+)'?", r.text)
-        if not m:
-            raise ValueError("vqd não encontrado")
-        return m.group(1)
-
-    def _ddg_pensar(self, pergunta):
-        vqd = self._ddg_vqd()
-        msgs = [{"role": "system", "content": PERSONALIDADE}] \
-             + self.historico \
-             + [{"role": "user", "content": pergunta}]
-        r = requests.post(
-            DDG_CHAT_API,
-            headers={
-                "User-Agent": "Mozilla/5.0",
-                "Content-Type": "application/json",
-                "x-vqd-4": vqd,
-                "Accept": "text/event-stream",
-            },
-            json={"model": MODELO_DDG, "messages": msgs},
-            stream=True, timeout=30)
-        r.raise_for_status()
-        resposta = ""
-        for linha in r.iter_lines(decode_unicode=True):
-            if linha and linha.startswith("data:"):
-                resposta += linha[5:].strip()
-        resposta = resposta.replace("[DONE]", "").strip()
-        if not resposta:
-            raise ValueError("resposta vazia")
-        return resposta
-
-    def _ddg_instant(self, pergunta):
-        r = requests.get(
-            "https://api.duckduckgo.com/",
-            params={"q": pergunta, "format": "json",
-                    "no_html": 1, "skip_disambig": 1},
-            timeout=10)
-        r.raise_for_status()
-        d = r.json()
-        texto = d.get("AbstractText") or ""
-        if not texto and d.get("RelatedTopics"):
-            texto = d["RelatedTopics"][0].get("Text", "")
-        if not texto:
-            raise ValueError("sem resposta instantânea")
-        return texto
-
-    def _wiki(self, pergunta):
-        import wikipedia
-        wikipedia.set_lang("pt")
-        tema = pergunta.strip().rstrip("?")
-        return wikipedia.summary(tema, sentences=2)
-
-    def pensar(self, pergunta):
-        tentativas = [
-            ("IA do DuckDuckGo", self._ddg_pensar),
-            ("resposta direta",  self._ddg_instant),
-            ("Wikipédia",        self._wiki),
-        ]
-        for nome, func in tentativas:
-            try:
-                resp = func(pergunta)
-                if resp:
-                    print(f"[cérebro: {nome}]")
-                    self.lembrar("user", pergunta)
-                    self.lembrar("assistant", resp)
-                    return resp
-            except Exception:
-                continue
-        return ("Me desculpe, senhor, não consegui consultar meus bancos de "
-                "dados agora. Poderia repetir daqui a pouco?")
-
-
-class _Cfg:  # embrulha as configs pro cérebro
-    MAX_MEMORIA = MAX_MEMORIA
-
-
-# ══════════ NÚCLEO DO JARVIS ══════════
-
-import datetime
-import random
-import subprocess
-import webbrowser
-import pyjokes
-import psutil
-import feedparser
-import pywhatkit
-import wikipedia
-
-import speech_recognition as sr
-import pyttsx3
-
-wikipedia.set_lang("pt")
-
-SAUDACOES_ACORDAR = [
-    "Sim, senhor? Estou ouvindo.",
-    "Às suas ordens, Chefe.",
-    "Sistemas ativos. Em que posso ajudar?",
-    "Pode falar, senhor.",
-]
-
-
-class Jarvis:
-    def __init__(self, log=lambda m: print(m)):
-        self.log = log
-        self.cerebro = Cerebro(_Cfg())
-
-        self.engine = pyttsx3.init()
-        self.engine.setProperty("rate", VELOCIDADE_FALA)
-        if VOZ_ID:
-            self.engine.setProperty("voice", VOZ_ID)
-
-        self.rec = sr.Recognizer()
-        self.mic = sr.Microphone()
-
-    def falar(self, texto):
-        self.log(f"JARVIS: {texto}")
-        self.engine.say(texto)
-        self.engine.runAndWait()
-
-    def ouvir(self, frase_status="Ouvindo..."):
-        with self.mic as fonte:
-            self.log(frase_status)
-            self.rec.adjust_for_ambient_noise(fonte, duration=0.5)
-            audio = self.rec.listen(fonte, timeout=10, phrase_time_limit=10)
-        try:
-            texto = self.rec.recognize_google(audio, language=IDIOMA_STT)
-            self.log(f"Você: {texto}")
-            return texto.lower()
-        except sr.UnknownValueError:
-            return ""
-        except (sr.RequestError, sr.WaitTimeoutError):
-            self.falar("Sem conexão com o serviço de reconhecimento.")
-            return ""
-
-    def aguardar_wake_word(self):
-        self.log(f'Aguardando wake word "{WAKE_WORD}"...')
-        while True:
-            frase = self.ouvir("Standby...")
-            if WAKE_WORD in frase:
-                self.falar(random.choice(SAUDACOES_ACORDAR))
-                return True
-
-    def conversar(self):
-        silencio = 0
-        while silencio < TIMEOUT_CONVERSA:
-            cmd = self.ouvir()
-            if not cmd:
-                silencio += 1
-                continue
-            silencio = 0
-            if not self.executar(cmd):
-                return False
-        self.falar("Vou voltar ao modo standby, senhor. É só me chamar.")
-        return True
-
-    def executar(self, cmd):
-        if not cmd:
-            return True
-
-        if "horas" in cmd:
-            self.falar(f"São {datetime.datetime.now().strftime('%H:%M')}.")
-        elif "dia é hoje" in cmd or "data" in cmd:
-            self.falar(f"Hoje é {datetime.datetime.now().strftime('%d de %B de %Y')}.")
-        elif "viral" in cmd or "trending" in cmd or "bombando" in cmd:
-            self.noticias_virais()
-        elif "notícia" in cmd or "noticia" in cmd:
-            if "sobre" in cmd:
-                self.pesquisar_noticias(cmd.split("sobre")[-1].strip())
-            elif "brasil" in cmd:
-                self._ler_feed(FONTES_NOTICIAS["brasil"], "Notícias do Brasil, senhor:")
-            else:
-                self._ler_feed(FONTES_NOTICIAS["mundo"], "Notícias do mundo, senhor:")
-        elif "clima" in cmd or "temperatura" in cmd:
-            self.clima()
-        elif "bateria" in cmd:
-            bateria = psutil.sensors_battery()
-            self.falar(f"A bateria está em {bateria.percent}%." if bateria
-                       else "Não encontrei informação de bateria.")
-        elif "abra o" in cmd or "abre o" in cmd:
-            self.abrir_programa(cmd.replace("abra o", "").replace("abre o", "").strip())
-        elif "piada" in cmd:
-            self.falar(pyjokes.get_joke(language="pt"))
-        elif "youtube" in cmd:
-            tema = cmd.replace("youtube", "").replace("tocar", "").strip()
-            self.falar(f"Tocando {tema} no YouTube.")
-            pywhatkit.playonyt(tema)
-        elif "pesquise no google" in cmd:
-            tema = cmd.replace("pesquise no google", "").strip()
-            webbrowser.open(f"https://www.google.com/search?q={tema}")
-            self.falar(f"Pesquisando {tema} no Google.")
-        elif "desligar" in cmd or "sair" in cmd or "tchau" in cmd:
-            self.falar("Até logo, senhor. Desligando sistemas.")
-            return False
-        else:
-            resposta = self.cerebro.pensar(cmd)
-            self.falar(resposta)
-        return True
-
-    def _ler_feed(self, url, intro):
-        feed = feedparser.parse(url)
-        if not feed.entries:
-            self.falar("Não consegui acessar as notícias agora, senhor.")
-            return
-        self.falar(intro)
-        for item in feed.entries[:MAX_NOTICIAS]:
-            self.falar(item.title)
-
-    def noticias_virais(self):
-        self._ler_feed(FONTES_NOTICIAS["virais_br"],
-                       "O que está bombando no Brasil agora, senhor:")
-
-    def pesquisar_noticias(self, tema):
-        q = requests.utils.quote(tema)
-        url = (f"https://news.google.com/rss/search?q={q}"
-               f"&hl=pt-BR&gl=BR&ceid=BR:pt-419")
-        self._ler_feed(url, f"Notícias sobre {tema}:")
-
-    def clima(self):
-        try:
-            r = requests.get(
-                f"https://wttr.in/{CIDADE}?format=%C+%t&lang=pt", timeout=10)
-            self.falar(f"Na cidade de {CIDADE}: {r.text.strip()}.")
-        except Exception:
-            self.falar("Não consegui consultar o clima agora.")
-
-    def abrir_programa(self, nome):
-        atalhos = {
-            "bloco de notas": "notepad",
-            "navegador": "chrome",
-            "calculadora": "calc",
-            "spotify": "spotify",
-        }
-        programa = atalhos.get(nome, nome)
-        try:
-            subprocess.Popen(programa)
-            self.falar(f"Abrindo {nome}.")
-        except FileNotFoundError:
-            self.falar(f"Não encontrei o programa {nome}.")
-
-    def rodar(self):
-        self.falar(f"JARVIS online. Bom te ver, {NOME_USUARIO}. "
-                   f'Dou o comando "{WAKE_WORD}" para me acordar.')
-        while True:
-            self.aguardar_wake_word()
-            if not self.conversar():
-                break
-
-
-# ══════════ MODO INTERFACE GRÁFICA ══════════
-
-import tkinter as tk
-import threading
-
-COR_FUNDO = "#050b1a"
-COR_AZUL = "#19b8ff"
-COR_TEXTO = "#c8ecff"
-
-
-class InterfaceJarvis:
-    def __init__(self):
-        self.root = tk.Tk()
-        self.root.title("J.A.R.V.I.S.")
-        self.root.configure(bg=COR_FUNDO)
-        self.root.geometry("800x600")
-
-        self.jarvis = Jarvis(log=self._log)
-
-        self._montar_widgets()
-        self._animar_anel()
-        self._log("JARVIS inicializado. Pronto para conversar, senhor.")
-
-    def _montar_widgets(self):
-        self.canvas = tk.Canvas(self.root, width=220, height=220,
-                                bg=COR_FUNDO, highlightthickness=0)
-        self.canvas.pack(pady=20)
-        self.anel = self.canvas.create_oval(30, 30, 190, 190,
-                                            outline=COR_AZUL, width=3)
-        self.nucleo = self.canvas.create_oval(90, 90, 130, 130,
-                                              fill=COR_AZUL, outline="")
-        self.canvas.create_text(110, 110, text="JARVIS",
-                                fill=COR_FUNDO, font=("Consolas", 10, "bold"))
-
-        self.status = tk.Label(self.root, text="STANDBY — diga 'Jarvis'",
-                               fg=COR_AZUL, bg=COR_FUNDO, font=("Consolas", 12))
-        self.status.pack()
-
-        self.log_box = tk.Text(self.root, height=13, bg="#0a1630", fg=COR_TEXTO,
-                               insertbackground=COR_TEXTO, font=("Consolas", 11),
-                               state="disabled", wrap="word")
-        self.log_box.pack(fill="both", expand=True, padx=20, pady=10)
-
-        linha = tk.Frame(self.root, bg=COR_FUNDO)
-        linha.pack(fill="x", padx=20, pady=10)
-
-        self.entrada = tk.Entry(linha, bg="#0a1630", fg=COR_TEXTO,
-                                insertbackground=COR_TEXTO, font=("Consolas", 12))
-        self.entrada.pack(side="left", fill="x", expand=True)
-        self.entrada.bind("<Return>", self._enviar_texto)
-
-        tk.Button(linha, text="Enviar", command=self._enviar_texto,
-                  bg=COR_AZUL, fg=COR_FUNDO, font=("Consolas", 10, "bold"),
-                  relief="flat").pack(side="left", padx=5)
-
-        tk.Button(linha, text="🎙️ Falar", command=self._falar,
-                  bg="#0a3a5c", fg=COR_TEXTO, font=("Consolas", 10, "bold"),
-                  relief="flat").pack(side="left")
-
-    def _animar_anel(self, angulo=0):
-        largura = 3 + int(2 * abs((angulo % 60) - 30) / 10)
-        self.canvas.itemconfig(self.anel, width=largura)
-        self.root.after(80, lambda: self._animar_anel(angulo + 6))
-
-    def _log(self, msg):
-        self.log_box.config(state="normal")
-        self.log_box.insert("end", msg + "\n")
-        self.log_box.see("end")
-        self.log_box.config(state="disabled")
-
-    def _enviar_texto(self, evento=None):
-        cmd = self.entrada.get().strip()
-        if not cmd:
-            return
-        self.entrada.delete(0, "end")
-        self._log(f"Você: {cmd}")
-        threading.Thread(target=self._processar, args=(cmd.lower(),), daemon=True).start()
-
-    def _falar(self):
-        self.status.config(text="OUVINDO...")
-        threading.Thread(target=self._escutar, daemon=True).start()
-
-    def _escutar(self):
-        frase = self.jarvis.ouvir()
-        self.root.after(0, lambda: self.status.config(text="STANDBY — diga 'Jarvis'"))
-        if frase:
-            self._log(f"Você: {frase}")
-            self._processar(frase)
-
-    def _processar(self, cmd):
-        ativo = self.jarvis.executar(cmd)
-        if not ativo:
-            self.root.after(1500, self.root.destroy)
-
-
-# ══════════ PONTO DE ENTRADA ══════════
-
-if __name__ == "__main__":
-    import sys
-    if "--gui" in sys.argv:
-        InterfaceJarvis().root.mainloop()
-    else:
-        Jarvis().rodar()
+</body>
+</html>
